@@ -1,0 +1,8 @@
+{
+  "name": "feat",
+  "description": "Full workflow — scenarios 1 & 2 (new feature + extension). Steps 1-10 per document/workflow.md. Step 2 (Learning) may be skipped by the 'extend' magic keyword.",
+  "steps": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "e2e": true,
+  "video": true,
+  "minTests": 10
+}

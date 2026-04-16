@@ -1,0 +1,47 @@
+name: qa
+description: Narrow execution — bug fixes and small edits (Steps 4-8, 10)
+feature_scoped: true
+
+steps:
+  step-4:
+    name: Test Design (TDD with exemption)
+    prompt: steps/step-4-tdd.md
+    gate: tests_exist_and_red
+    exempt_if: [css, i18n, typo, dialogue]
+    next: step-5
+
+  step-5:
+    name: Implementation
+    prompt: steps/step-5-implementation.md
+    gate: tests_green
+    max_retry: 3
+    next: step-6
+
+  step-6:
+    name: Local Agent Review
+    prompt: steps/step-6-review.md
+    gate: review_clean
+    on_fail:
+      code_quality: step-5
+      security: step-5
+    next: step-7
+
+  step-7:
+    name: Utility Test (Scoped)
+    prompt: steps/step-7-test.md
+    gate: tests_pass_and_build_clean
+    on_fail: step-5
+    next: step-8
+
+  step-8:
+    name: E2E Validation (Surface-based)
+    prompt: steps/step-8-e2e.md
+    gate: e2e_pass
+    on_fail: step-5
+    next: step-10
+
+  step-10:
+    name: Human Review
+    type: gate
+    action: pause
+    options: [rework:step-5, complete, hold]

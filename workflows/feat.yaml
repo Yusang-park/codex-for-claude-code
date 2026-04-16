@@ -1,0 +1,85 @@
+name: feat
+description: Full 10-step workflow (new feature + extension)
+feature_scoped: true
+
+steps:
+  step-1:
+    name: Problem Recognition
+    prompt: steps/step-1-recognition.md
+    next: step-2
+
+  step-2:
+    name: Pre Review (Learning)
+    prompt: steps/step-2-prereview.md
+    next: step-3
+    skip_if: extend_keyword
+
+  step-3:
+    name: Planning
+    prompt: steps/step-3-planning.md
+    next: step-3-interview
+
+  step-3-interview:
+    name: User Interview
+    type: gate
+    action: pause
+    allow_revisit: [step-1, step-2, step-3]
+    next: step-4
+
+  step-4:
+    name: Test Design (TDD)
+    prompt: steps/step-4-tdd.md
+    gate: tests_exist_and_red
+    exempt_if: [css, i18n, typo, dialogue]
+    next: step-5
+
+  step-5:
+    name: Implementation
+    prompt: steps/step-5-implementation.md
+    gate: tests_green
+    max_retry: 3
+    on_max_retry: step-2
+    next: step-6
+
+  step-6:
+    name: Local Agent Review
+    prompt: steps/step-6-review.md
+    gate: review_clean
+    on_fail:
+      code_quality: step-5
+      bug: step-5
+      security: step-5
+      plan_mismatch: step-3
+      edge_case: step-3
+    next: step-7
+
+  step-7:
+    name: Utility Test (Scoped)
+    prompt: steps/step-7-test.md
+    gate: tests_pass_and_build_clean
+    on_fail: step-5
+    next: step-8
+
+  step-8:
+    name: E2E Validation
+    prompt: steps/step-8-e2e.md
+    gate: e2e_pass
+    on_fail: step-5
+    next: step-9
+
+  step-9:
+    name: Team Code Review
+    prompt: steps/step-9-teamreview.md
+    gate: team_review_clean
+    on_fail:
+      critical: step-3
+      high: step-3
+      medium: step-5
+      low: continue
+    next: step-10
+
+  step-10:
+    name: Human Review
+    type: gate
+    action: pause
+    options: [rework:step-3, complete, hold]

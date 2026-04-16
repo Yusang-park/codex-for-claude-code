@@ -1,0 +1,25 @@
+name: tasker
+description: Planning state creation/refinement (Steps 1-3 + interview)
+feature_scoped: true
+
+steps:
+  step-1:
+    name: Problem Recognition
+    prompt: steps/step-1-recognition.md
+    next: step-2
+
+  step-2:
+    name: Pre Review (Learning)
+    prompt: steps/step-2-prereview.md
+    next: step-3
+
+  step-3:
+    name: Planning
+    prompt: steps/step-3-planning.md
+    next: step-3-interview
+
+  step-3-interview:
+    name: User Interview (final)
+    type: gate
+    action: pause
+    allow_revisit: [step-1, step-2, step-3]

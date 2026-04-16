@@ -1,0 +1,15 @@
+{
+  "name": "codex-for-claude-code",
+  "version": "1.0.0",
+  "description": "Open-source Codex-style workflows for Claude Code",
+  "hooks": "hooks/hooks.json",
+  "author": "Yusang Park",
+  "homepage": "https://github.com/yusang-park/codex-for-claude-code",
+  "repository": "https://github.com/yusang-park/codex-for-claude-code",
+  "license": "MIT",
+  "tags": [
+    "claude-code",
+    "codex",
+    "workflow"
+  ]
+}

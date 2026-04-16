@@ -1,0 +1,8 @@
+{
+  "name": "qa",
+  "description": "Narrow execution — bug fixes and small edits (scenarios 3 & 4). Steps 4-8, 10 per document/workflow.md. E2E determined per task by change surface. TDD exemption available for CSS/i18n/typo/dialogue.",
+  "steps": [4, 5, 6, 7, 8, 10],
+  "e2e": "surface",
+  "video": "surface",
+  "minTests": 5
+}
