@@ -1,6 +1,7 @@
 # codex-for-claude-code
 
-<img width="911" height="717" alt="image" src="https://github.com/user-attachments/assets/7c8de843-e18f-49c9-bfed-3876830bafd5" />
+<img width="903" height="724" alt="image" src="https://github.com/user-attachments/assets/4c873064-7f3d-4d55-9308-1a264c7aba75" />
+
 
 
 > Run **[Claude Code](https://claude.ai/code)** against **ChatGPT Codex** using your existing Codex CLI subscription.
