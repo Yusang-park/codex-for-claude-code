@@ -1,5 +1,8 @@
 # codex-for-claude-code
 
+<img width="911" height="717" alt="image" src="https://github.com/user-attachments/assets/7c8de843-e18f-49c9-bfed-3876830bafd5" />
+
+
 > Run **[Claude Code](https://claude.ai/code)** against **ChatGPT Codex** using your existing Codex CLI subscription.
 
 A local proxy translates Anthropic Messages API ↔ ChatGPT Responses API so the Claude Code TUI you already know talks to `gpt-5.4`, `gpt-5.3`, and other Codex models — **without an Anthropic API key, using your ChatGPT Plus/Pro billing**.
