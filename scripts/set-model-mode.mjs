@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -10,20 +11,22 @@ const defaultStateDir = join(process.cwd(), '.smt', 'state');
 const statePath = join(defaultStateDir, 'model-mode.json');
 const claudeJsonPath = join(homedir(), '.claude.json');
 
-// Codex mode uses a separate CLAUDE_CONFIG_DIR (~/.claude-codex) so its
-// state file (.claude.json) cannot bleed into plain `claude` sessions that
-// read ~/.claude/.claude.json. Shared Claude assets (settings.json, agents,
-// commands, hooks) are symlinked from ~/.claude so users keep a single
-// source of truth for those while the lastUsedModel / additionalModelOptionsCache
-// stay isolated.
+// Codex mode shares the regular Claude config dir (~/.claude) so session
+// history and `--resume` stay interoperable with plain `claude`.
+// Model-picker state is isolated by writing Codex options to a cwd-scoped
+// `.claude-<sha8(NFC(cwd))>.json` file inside that shared dir.
 const SHARED_LINKS = ['settings.json', 'agents', 'commands', 'hooks', 'plugins'];
 
-export function getCodexConfigDir(home = homedir()) {
-  return join(home, '.claude-codex');
+function buildScopedConfigHash(cwd = process.cwd()) {
+  return createHash('sha256').update(String(cwd).normalize('NFC')).digest('hex').slice(0, 8);
 }
 
-export function getCodexClaudeJsonPath(configDir = getCodexConfigDir()) {
-  return join(configDir, '.claude.json');
+export function getCodexConfigDir(home = homedir()) {
+  return join(home, '.claude');
+}
+
+export function getCodexClaudeJsonPath(cwd = process.cwd(), home = homedir()) {
+  return join(getCodexConfigDir(home), `.claude-${buildScopedConfigHash(cwd)}.json`);
 }
 
 export function ensureCodexConfigDir(home = homedir()) {
@@ -137,18 +140,18 @@ export function applyCodexMode(settings) {
   const activeModel = resolveCodexDefaultModel(current);
   // settings.json is shared with plain `claude` sessions; never persist a
   // Codex model ID here or plain claude will boot with gpt-* and 401.
-  // Codex state lives in ~/.claude-codex/.claude.json (CLAUDE_CONFIG_DIR).
+  // Codex model-picker state lives in ~/.claude/.claude-<hash>.json while
+  // sessions keep using the shared ~/.claude config dir.
   delete settings.model;
   delete settings.modelOverrides;
   delete settings.availableModels;
   stripModelEnv(settings);
   delete settings.env.ANTHROPIC_BASE_URL;
   ensureCodexConfigDir();
-  // Write codex options to the scoped config file, NOT the global ~/.claude.json.
-  // The wrapper injects CLAUDE_CONFIG_DIR into the codex child so Claude Code
-  // reads this scoped file instead. Plain `claude` windows (no CLAUDE_CONFIG_DIR)
-  // read ~/.claude.json and stay untouched → concurrent-safe isolation.
-  setModelCache(CODEX_MODEL_OPTIONS, getCodexClaudeJsonPath());
+  // Write codex options to the cwd-scoped file, NOT the global ~/.claude.json.
+  // The wrapper points Claude Code at ~/.claude so sessions stay shared; the
+  // binary resolves the scoped .claude-<hash>.json file for model cache.
+  setModelCache(CODEX_MODEL_OPTIONS, getCodexClaudeJsonPath(process.cwd()));
   ensureStateDir(defaultStateDir);
   writeJsonFile(statePath, buildModelModeState(activeModel));
   return activeModel;
@@ -166,7 +169,8 @@ export function applyClaudeMode(settings, cwd = process.cwd()) {
   // One-time migration: zero the global cache in case a prior (pre-isolation)
   // codex run left options there. New codex runs no longer write to it.
   // Do NOT touch the codex-scoped file — a concurrent codex window may be
-  // running and re-reading it. Claude mode reads the global file only.
+  // running and re-reading it. Plain Claude uses the shared session dir and
+  // the non-scoped cache path only.
   clearModelCache();
   removeIfExists(join(cwd, '.smt', 'state', 'codex-state.json'));
 }

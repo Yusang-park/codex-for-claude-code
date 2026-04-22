@@ -37,6 +37,11 @@ if (parsed.mode !== 'codex' || !parsed.passthrough.includes('--version') || !par
   process.exit(1);
 }
 
+if (parsed.childEnvPreview?.CLAUDE_CONFIG_DIR !== join(tempHome, '.claude')) {
+  process.stderr.write(`wrapper test: expected codex CLAUDE_CONFIG_DIR to share ~/.claude, got ${JSON.stringify(parsed.childEnvPreview)}\n`);
+  process.exit(1);
+}
+
 const inheritedCodexEnv = JSON.parse(
   execFileSync(process.execPath, [wrapper, '--claude', '--version'], {
     env: {
