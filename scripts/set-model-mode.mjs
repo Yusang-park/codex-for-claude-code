@@ -135,6 +135,10 @@ export function stripModelEnv(settings) {
 export function applyCodexMode(settings) {
   const current = settings.model ?? '';
   const activeModel = resolveCodexDefaultModel(current);
+  // settings.json is shared with plain `claude` sessions; never persist a
+  // Codex model ID here or plain claude will boot with gpt-* and 401.
+  // Codex state lives in ~/.claude-codex/.claude.json (CLAUDE_CONFIG_DIR).
+  delete settings.model;
   delete settings.modelOverrides;
   delete settings.availableModels;
   stripModelEnv(settings);
@@ -151,6 +155,9 @@ export function applyCodexMode(settings) {
 }
 
 export function applyClaudeMode(settings, cwd = process.cwd()) {
+  // Mirror codex-mode: never persist a model here. Plain `claude` picks its
+  // own default; leaving a stale value lets modes cross-contaminate.
+  delete settings.model;
   delete settings.modelOverrides;
   delete settings.env.ANTHROPIC_BASE_URL;
   delete settings.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC;
