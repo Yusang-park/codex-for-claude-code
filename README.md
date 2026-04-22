@@ -52,12 +52,11 @@ npm link
 ## Usage
 
 ```bash
-claude-codex                      # Codex mode (default)
-claude-codex --claude             # plain Claude Code (Anthropic backend)
+claude-codex                      # launch Claude Code in Codex mode
 claude-codex --resume my-session  # any extra args forward to `claude`
 ```
 
-That's it. The wrapper auto-starts the proxy, injects the proper env vars, and spawns Claude Code. The TUI looks identical — just pick a Codex model from the model picker.
+That's it. The wrapper auto-starts the proxy, injects the proper env vars, and spawns Claude Code. The TUI looks identical — just pick a Codex model from the model picker. For plain Anthropic-backed Claude Code, run `claude` directly — this wrapper doesn't touch that path.
 
 ---
 
