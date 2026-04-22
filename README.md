@@ -130,6 +130,19 @@ Check proxy health: `curl http://127.0.0.1:3099/health`. If `version` mismatches
 
 ---
 
+## Compared to LiteLLM / other proxies
+
+|  | codex-for-claude-code | LiteLLM | generic Anthropic↔OpenAI proxy |
+|--|--|--|--|
+| Billing | **ChatGPT subscription** (Codex OAuth) | per-token API key | per-token API key |
+| Scope | Claude Code ↔ Codex, one job | 100+ providers, gateway/router | generic translator |
+| Setup | `npm link` + `codex login` | config YAML, keys, server | server + keys |
+| Model picker injection | yes (scoped, isolated) | no | no |
+
+Use LiteLLM if you have API keys and need a routing layer. Use this if you already pay for ChatGPT and just want Claude Code to hit Codex.
+
+---
+
 ## ⚠️ Caveats
 
 - **Unofficial endpoint.** `chatgpt.com/backend-api/codex` is the endpoint Codex CLI itself uses. It is not a public API. OpenAI can change or block it at any time — use at your own risk.
