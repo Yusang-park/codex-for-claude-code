@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODEL_OPTIONS, DEFAULT_CODEX_MODEL, getCodexModelLabel } from './lib/codex-models.mjs';
@@ -12,18 +11,15 @@ const statePath = join(defaultStateDir, 'model-mode.json');
 const claudeJsonPath = join(homedir(), '.claude.json');
 
 // Codex mode uses a scoped config file inside ~/.claude/ so it cannot bleed
-// into plain `claude` windows that read ~/.claude.json. The Claude binary
-// resolves config as `<CLAUDE_CONFIG_DIR>/.claude-<sha256(NFC(dir)).slice(0,8)>.json`
-// when CLAUDE_CONFIG_DIR is set. We reuse ~/.claude so settings/agents/hooks
-// directories remain shared across modes; only the JSON state file is split.
+// into plain `claude` windows that read ~/.claude.json. Claude Code (v2.1+)
+// resolves its state file as `<CLAUDE_CONFIG_DIR>/.claude.json`. Earlier
+// versions used a sha256-hashed filename; that path is no longer read.
 export function getCodexConfigDir(home = homedir()) {
   return join(home, '.claude');
 }
 
 export function getCodexClaudeJsonPath(configDir = getCodexConfigDir()) {
-  const normalized = configDir.normalize('NFC');
-  const hash = createHash('sha256').update(normalized).digest('hex').slice(0, 8);
-  return join(configDir, `.claude-${hash}.json`);
+  return join(configDir, '.claude.json');
 }
 
 function patchClaudeJson(additionalModelOptionsCache, filePath = claudeJsonPath) {

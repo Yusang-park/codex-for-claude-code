@@ -1,6 +1,6 @@
 {
   "name": "codex-for-claude-code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run Claude Code against ChatGPT Codex via your Codex CLI OAuth.",
   "type": "module",
   "bin": {
