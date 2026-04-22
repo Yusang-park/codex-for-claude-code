@@ -68,11 +68,11 @@ On each launch `claude-codex` does 5 things:
 
 1. Reads `~/.codex/auth.json` for your Codex OAuth token.
 2. Ensures the proxy is running on `127.0.0.1:3099` (spawns detached if not).
-3. Injects Codex model options into a **scoped** config (`~/.claude/.claude-<hash>.json`) so the Claude Code model picker shows `gpt-5.4`, `gpt-5.3`, … without polluting your plain `claude` sessions.
-4. Cleans conflicting `ANTHROPIC_*` env keys from `~/.claude/settings.json`.
+3. Ensures `~/.claude-codex/` exists with symlinks to your shared Claude assets (`settings.json`, `agents`, `commands`, `hooks`, `plugins`). Only `.claude.json` — which stores the model picker + last-used model — is kept separate, so plain `claude` and `claude-codex` never fight over it.
+4. Injects Codex model options into `~/.claude-codex/.claude.json` so the model picker shows `gpt-5.4`, `gpt-5.3`, … Cleans conflicting `ANTHROPIC_*` env keys from `~/.claude/settings.json`.
 5. Spawns `claude` with:
    - `ANTHROPIC_BASE_URL=http://127.0.0.1:3099` (route API through proxy)
-   - `CLAUDE_CONFIG_DIR=~/.claude` (isolate state from plain `claude`)
+   - `CLAUDE_CONFIG_DIR=~/.claude-codex` (isolate state from plain `claude`)
 
 ### Request path
 
@@ -156,7 +156,7 @@ npm uninstall -g codex-for-claude-code
 pkill -f codex-proxy.mjs
 ```
 
-Your `~/.claude/settings.json` is left intact (only `ANTHROPIC_*` env noise and `modelOverrides` are stripped on each run). The scoped cache file `~/.claude/.claude-<hash>.json` can be deleted safely.
+Your `~/.claude/settings.json` is left intact (only `ANTHROPIC_*` env noise and `modelOverrides` are stripped on each run). The scoped state directory `~/.claude-codex/` is safe to delete.
 
 ---
 
