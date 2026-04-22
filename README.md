@@ -15,7 +15,13 @@ Requires Node.js ≥ 20, [Claude Code](https://claude.ai/code), and a logged-in 
 
 ```bash
 npm install -g codex-for-claude-code
-claude-codex
+```
+
+## How to run
+
+```bash
+claude-codex                      # launch Claude Code in Codex mode
+claude-codex --resume my-session  # any extra args forward to `claude`
 ```
 
 ---
