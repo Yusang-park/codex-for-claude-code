@@ -118,21 +118,6 @@ async function main() {
     await ensureProxyRunning();
   }
 
-  if (process.env.SMELTER_WRAPPER_TEST === '1') {
-    const activeModel = mode === 'codex'
-      ? process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? 'gpt-5.4'
-      : process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? null;
-    process.stdout.write(
-      JSON.stringify({
-        binary,
-        mode,
-        passthrough,
-        activeModel,
-      }),
-    );
-    return;
-  }
-
   // In codex mode inject model-override env vars directly into the child process.
   // settings.json env vars only apply after Claude Code restarts; passing them
   // in the child's process.env ensures the model picker shows Codex models
@@ -159,14 +144,40 @@ async function main() {
     // Restore defaults — unset any codex overrides inherited from parent env
     CODEX_MODE: '',
     SMELTER_MODEL_MODE: 'claude',
+    SMELTER_ACTIVE_MODEL: '',
     ANTHROPIC_BASE_URL: '',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '',
+    CLAUDE_CONFIG_DIR: '',
   };
 
   // Remove empty-string keys (undefine them) so Claude doesn't see blank values
   const filteredEnv = Object.fromEntries(
     Object.entries({ ...process.env, ...codexEnv }).filter(([, v]) => v !== ''),
   );
+
+  if (process.env.SMELTER_WRAPPER_TEST === '1') {
+    const childEnvPreview = {
+      CODEX_MODE: filteredEnv.CODEX_MODE,
+      SMELTER_MODEL_MODE: filteredEnv.SMELTER_MODEL_MODE,
+      SMELTER_ACTIVE_MODEL: filteredEnv.SMELTER_ACTIVE_MODEL,
+      CLAUDE_CONFIG_DIR: filteredEnv.CLAUDE_CONFIG_DIR,
+      ANTHROPIC_BASE_URL: filteredEnv.ANTHROPIC_BASE_URL,
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: filteredEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
+    };
+    const activeModel = mode === 'codex'
+      ? process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? 'gpt-5.4'
+      : process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? null;
+    process.stdout.write(
+      JSON.stringify({
+        binary,
+        mode,
+        passthrough,
+        activeModel,
+        childEnvPreview,
+      }),
+    );
+    return;
+  }
 
   const child = spawn(binary, passthrough, {
     stdio: 'inherit',
