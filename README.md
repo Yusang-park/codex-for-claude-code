@@ -6,6 +6,9 @@
 
 > Run **[Claude Code](https://claude.ai/code)** against **ChatGPT Codex** using your existing Codex CLI subscription.
 
+> [!IMPORTANT]
+> If you hit a **401** error, just launch the Codex CLI once (`codex`) to refresh the OAuth token, then rerun `claude-codex`.
+
 A local proxy translates Anthropic Messages API ↔ ChatGPT Responses API so the Claude Code TUI you already know talks to `gpt-5.4`, `gpt-5.3`, and other Codex models — **without an Anthropic API key, using your ChatGPT Plus/Pro billing**.
 
 ```
@@ -114,6 +117,9 @@ Claude model IDs (`claude-*`, `opus`, `sonnet`, `haiku`) **pass through unchange
 
 **`No Codex auth: login via \`codex\` CLI`**
 Run `codex login`. Verify `~/.codex/auth.json` contains `tokens.access_token`.
+
+**401 Unauthorized from ChatGPT backend**
+The Codex OAuth token expired. Launch the Codex CLI once (`codex`) — it silently refreshes `~/.codex/auth.json` — then rerun `claude-codex`.
 
 **`Could not find Claude Code binary`**
 Install Claude Code from <https://claude.ai/code>, or set `CLAUDE_CODEX_CLAUDE_BIN=/path/to/claude`.
