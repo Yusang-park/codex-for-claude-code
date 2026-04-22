@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODEL_OPTIONS, DEFAULT_CODEX_MODEL, getCodexModelLabel } from './lib/codex-models.mjs';
@@ -10,16 +10,34 @@ const defaultStateDir = join(process.cwd(), '.smt', 'state');
 const statePath = join(defaultStateDir, 'model-mode.json');
 const claudeJsonPath = join(homedir(), '.claude.json');
 
-// Codex mode uses a scoped config file inside ~/.claude/ so it cannot bleed
-// into plain `claude` windows that read ~/.claude.json. Claude Code (v2.1+)
-// resolves its state file as `<CLAUDE_CONFIG_DIR>/.claude.json`. Earlier
-// versions used a sha256-hashed filename; that path is no longer read.
+// Codex mode uses a separate CLAUDE_CONFIG_DIR (~/.claude-codex) so its
+// state file (.claude.json) cannot bleed into plain `claude` sessions that
+// read ~/.claude/.claude.json. Shared Claude assets (settings.json, agents,
+// commands, hooks) are symlinked from ~/.claude so users keep a single
+// source of truth for those while the lastUsedModel / additionalModelOptionsCache
+// stay isolated.
+const SHARED_LINKS = ['settings.json', 'agents', 'commands', 'hooks', 'plugins'];
+
 export function getCodexConfigDir(home = homedir()) {
-  return join(home, '.claude');
+  return join(home, '.claude-codex');
 }
 
 export function getCodexClaudeJsonPath(configDir = getCodexConfigDir()) {
   return join(configDir, '.claude.json');
+}
+
+export function ensureCodexConfigDir(home = homedir()) {
+  const src = join(home, '.claude');
+  const dst = getCodexConfigDir(home);
+  mkdirSync(dst, { recursive: true });
+  for (const name of SHARED_LINKS) {
+    const link = join(dst, name);
+    const target = join(src, name);
+    if (existsSync(link)) continue;
+    if (!existsSync(target)) continue;
+    try { symlinkSync(target, link); } catch { /* race / permission — skip */ }
+  }
+  return dst;
 }
 
 function patchClaudeJson(additionalModelOptionsCache, filePath = claudeJsonPath) {
@@ -121,6 +139,7 @@ export function applyCodexMode(settings) {
   delete settings.availableModels;
   stripModelEnv(settings);
   delete settings.env.ANTHROPIC_BASE_URL;
+  ensureCodexConfigDir();
   // Write codex options to the scoped config file, NOT the global ~/.claude.json.
   // The wrapper injects CLAUDE_CONFIG_DIR into the codex child so Claude Code
   // reads this scoped file instead. Plain `claude` windows (no CLAUDE_CONFIG_DIR)
