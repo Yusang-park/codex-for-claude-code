@@ -1,13 +1,30 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODEL_OPTIONS, DEFAULT_CODEX_MODEL, getCodexModelLabel } from './lib/codex-models.mjs';
 
-const settingsPath = '/Users/yusang/smelter/settings.json';
+const settingsPath = process.env.CLAUDE_CODEX_SETTINGS_PATH
+  ?? join(homedir(), '.claude', 'settings.json');
 const defaultStateDir = join(process.cwd(), '.smt', 'state');
 const statePath = join(defaultStateDir, 'model-mode.json');
 const claudeJsonPath = join(homedir(), '.claude.json');
+
+// Codex mode uses a scoped config file inside ~/.claude/ so it cannot bleed
+// into plain `claude` windows that read ~/.claude.json. The Claude binary
+// resolves config as `<CLAUDE_CONFIG_DIR>/.claude-<sha256(NFC(dir)).slice(0,8)>.json`
+// when CLAUDE_CONFIG_DIR is set. We reuse ~/.claude so settings/agents/hooks
+// directories remain shared across modes; only the JSON state file is split.
+export function getCodexConfigDir(home = homedir()) {
+  return join(home, '.claude');
+}
+
+export function getCodexClaudeJsonPath(configDir = getCodexConfigDir()) {
+  const normalized = configDir.normalize('NFC');
+  const hash = createHash('sha256').update(normalized).digest('hex').slice(0, 8);
+  return join(configDir, `.claude-${hash}.json`);
+}
 
 function patchClaudeJson(additionalModelOptionsCache, filePath = claudeJsonPath) {
   let data = {};
@@ -20,11 +37,15 @@ function patchClaudeJson(additionalModelOptionsCache, filePath = claudeJsonPath)
   }
 
   try {
+    // Ensure parent dir exists (codex-scoped path lives inside ~/.claude/
+    // which may not exist yet on a fresh install or in tests).
+    const dir = filePath.slice(0, filePath.lastIndexOf('/'));
+    if (dir) mkdirSync(dir, { recursive: true });
     data.additionalModelOptionsCache = additionalModelOptionsCache;
     writeFileSync(filePath, JSON.stringify(data) + '\n');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`[set-model-mode] warning: could not patch ~/.claude.json: ${message}\n`);
+    process.stderr.write(`[set-model-mode] warning: could not patch ${filePath}: ${message}\n`);
   }
 }
 
@@ -59,13 +80,13 @@ export function writeJsonFile(filePath, data) {
 }
 
 export function resolveCodexDefaultModel(currentModel = '') {
-  return DEFAULT_CODEX_MODEL;
+  return isCodexModel(currentModel) ? currentModel : DEFAULT_CODEX_MODEL;
 }
 
-export function buildModelModeState() {
+export function buildModelModeState(model = DEFAULT_CODEX_MODEL) {
   return {
     mode: 'codex',
-    model: getCodexModelLabel(DEFAULT_CODEX_MODEL),
+    model: getCodexModelLabel(model),
     updated_at: new Date().toISOString(),
   };
 }
@@ -75,6 +96,9 @@ export function setModelCache(additionalModelOptionsCache, filePath = claudeJson
 }
 
 export function clearModelCache(filePath = claudeJsonPath) {
+  // Don't create the file if it doesn't exist — clearing a non-existent cache
+  // is a no-op, not an invitation to materialize an empty config.
+  if (!existsSync(filePath)) return;
   patchClaudeJson([], filePath);
 }
 
@@ -96,32 +120,42 @@ export function stripModelEnv(settings) {
 
 export function applyCodexMode(settings) {
   const current = settings.model ?? '';
-  settings.model = resolveCodexDefaultModel(current);
+  const activeModel = resolveCodexDefaultModel(current);
   delete settings.modelOverrides;
   delete settings.availableModels;
   stripModelEnv(settings);
   delete settings.env.ANTHROPIC_BASE_URL;
-  setModelCache(CODEX_MODEL_OPTIONS);
+  // Write codex options to the scoped config file, NOT the global ~/.claude.json.
+  // The wrapper injects CLAUDE_CONFIG_DIR into the codex child so Claude Code
+  // reads this scoped file instead. Plain `claude` windows (no CLAUDE_CONFIG_DIR)
+  // read ~/.claude.json and stay untouched → concurrent-safe isolation.
+  setModelCache(CODEX_MODEL_OPTIONS, getCodexClaudeJsonPath());
   ensureStateDir(defaultStateDir);
-  writeJsonFile(statePath, buildModelModeState());
+  writeJsonFile(statePath, buildModelModeState(activeModel));
+  return activeModel;
 }
 
 export function applyClaudeMode(settings, cwd = process.cwd()) {
-  settings.model = 'sonnet';
   delete settings.modelOverrides;
   delete settings.env.ANTHROPIC_BASE_URL;
   delete settings.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC;
   stripModelEnv(settings);
   removeIfExists(statePath);
+  // One-time migration: zero the global cache in case a prior (pre-isolation)
+  // codex run left options there. New codex runs no longer write to it.
+  // Do NOT touch the codex-scoped file — a concurrent codex window may be
+  // running and re-reading it. Claude mode reads the global file only.
   clearModelCache();
-  removeIfExists(join(cwd, '.omc', 'state', 'codex-state.json'));
+  removeIfExists(join(cwd, '.smt', 'state', 'codex-state.json'));
 }
 
 export function readSettings() {
-  return readJsonFile(settingsPath);
+  if (!existsSync(settingsPath)) return {};
+  try { return readJsonFile(settingsPath); } catch { return {}; }
 }
 
 export function writeSettings(settings) {
+  mkdirSync(join(settingsPath, '..'), { recursive: true });
   writeJsonFile(settingsPath, settings);
 }
 

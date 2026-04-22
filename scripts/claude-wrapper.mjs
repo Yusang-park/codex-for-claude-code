@@ -3,8 +3,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
-import { setModelMode, CODEX_PROXY_PORT } from './set-model-mode.mjs';
+import { spawn, execFileSync } from 'node:child_process';
+import { setModelMode, clearModelCache, getCodexConfigDir, getCodexClaudeJsonPath, CODEX_PROXY_PORT } from './set-model-mode.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,21 +24,27 @@ function semverCompare(a, b) {
 }
 
 function resolveClaudeBinary() {
+  if (process.env.CLAUDE_CODEX_CLAUDE_BIN) return process.env.CLAUDE_CODEX_CLAUDE_BIN;
   const versionsDir = join(homedir(), '.local', 'share', 'claude', 'versions');
-  const versions = readdirSync(versionsDir).sort(semverCompare).reverse();
-  // Skip empty/broken binaries (failed downloads show as 0-byte files)
-  for (const v of versions) {
-    const p = join(versionsDir, v);
-    try {
-      const s = statSync(p);
-      if (s.size > 0 && (s.mode & 0o111)) return p; // non-empty + executable
-    } catch { continue; }
+  if (existsSync(versionsDir)) {
+    const versions = readdirSync(versionsDir).sort(semverCompare).reverse();
+    for (const v of versions) {
+      const p = join(versionsDir, v);
+      try {
+        const s = statSync(p);
+        if (s.size > 0 && (s.mode & 0o111)) return p;
+      } catch { continue; }
+    }
   }
-  throw new Error(`No valid Claude versions found in ${versionsDir}`);
+  try {
+    const p = execFileSync('which', ['claude'], { encoding: 'utf8' }).trim();
+    if (p) return p;
+  } catch { /* not on PATH */ }
+  throw new Error('Could not find Claude Code binary. Install Claude Code or set CLAUDE_CODEX_CLAUDE_BIN.');
 }
 
 function parseArgs(argv) {
-  let mode = 'claude';
+  let mode = 'codex';
   const passthrough = [];
 
   for (const arg of argv) {
@@ -103,7 +109,7 @@ async function ensureProxyRunning() {
 async function main() {
   const { mode, passthrough } = parseArgs(process.argv.slice(2));
   const binary = resolveClaudeBinary();
-  const settings = setModelMode(mode, process.cwd());
+  setModelMode(mode, process.cwd());
 
   if (mode === 'codex' && process.env.SMELTER_WRAPPER_TEST !== '1') {
     if (!hasCodexAuth()) {
@@ -113,12 +119,15 @@ async function main() {
   }
 
   if (process.env.SMELTER_WRAPPER_TEST === '1') {
+    const activeModel = mode === 'codex'
+      ? process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? 'gpt-5.4'
+      : process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? null;
     process.stdout.write(
       JSON.stringify({
         binary,
         mode,
         passthrough,
-        settings,
+        activeModel,
       }),
     );
     return;
@@ -128,15 +137,28 @@ async function main() {
   // settings.json env vars only apply after Claude Code restarts; passing them
   // in the child's process.env ensures the model picker shows Codex models
   // immediately on first launch.
+  const codexStateModel = process.env.SMELTER_WRAPPER_TEST === '1'
+    ? (process.env.SMELTER_WRAPPER_TEST_ACTIVE_MODEL ?? 'gpt-5.4')
+    : null;
   const codexEnv = mode === 'codex' ? {
+    CODEX_MODE: '1',
+    SMELTER_MODEL_MODE: 'codex',
+    SMELTER_ACTIVE_MODEL: codexStateModel ?? 'gpt-5.4',
     // Route all API calls through the local proxy.
     // Proxy passes claude-* model IDs through to Anthropic unchanged,
     // and translates gpt-*/o* model IDs to OpenAI format.
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${CODEX_PROXY_PORT}`,
     // Skip bootstrap so it doesn't overwrite our additionalModelOptionsCache injection
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    // Redirect Claude Code to the codex-scoped config file so its cached
+    // additionalModelOptionsCache + projects state stay isolated from plain
+    // `claude` windows that read ~/.claude.json. Uses ~/.claude as the dir
+    // so settings/agents/commands/hooks remain shared.
+    CLAUDE_CONFIG_DIR: getCodexConfigDir(),
   } : {
     // Restore defaults — unset any codex overrides inherited from parent env
+    CODEX_MODE: '',
+    SMELTER_MODEL_MODE: 'claude',
     ANTHROPIC_BASE_URL: '',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '',
   };
@@ -151,7 +173,25 @@ async function main() {
     env: filteredEnv,
   });
 
+  // One-time legacy-global cleanup: zero ~/.claude.json:additionalModelOptionsCache
+  // in case a pre-isolation codex run left options there. Harmless no-op on
+  // clean systems. We intentionally do NOT clear the scoped codex file —
+  // other codex windows may still be running and re-reading it, and the
+  // next codex launch will overwrite it with the same CODEX_MODEL_OPTIONS
+  // anyway, so leaving it populated is the safe steady state.
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned || mode !== 'codex') return;
+    cleaned = true;
+    try { clearModelCache(); } catch { /* best effort */ }
+  };
+  process.on('exit', cleanup);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(sig, () => { cleanup(); });
+  }
+
   child.on('exit', (code, signal) => {
+    cleanup();
     if (signal) {
       process.kill(process.pid, signal);
       return;

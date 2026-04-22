@@ -1,12 +1,10 @@
 {
   "name": "codex-for-claude-code",
   "version": "0.1.0",
-  "description": "Use Codex models inside Claude Code with a user-focused workflow layer.",
+  "description": "Run Claude Code against ChatGPT Codex via your Codex CLI OAuth.",
   "type": "module",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
   "bin": {
-    "codex": "dist/bin/cli.js"
+    "claude-codex": "bin/claude-codex.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -23,12 +21,20 @@
   "keywords": [
     "claude-code",
     "codex",
-    "workflow",
-    "agents",
-    "tdd"
+    "chatgpt",
+    "proxy"
   ],
   "author": "Yusang Park",
+  "files": [
+    "bin",
+    "scripts",
+    "hooks",
+    "plugin.json",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
-    "test": "node scripts/test-codex-split.mjs"
+    "test": "node scripts/test-codex-split.mjs",
+    "start": "node bin/claude-codex.mjs"
   }
 }
