@@ -35,16 +35,20 @@ Use your Codex CLI OAuth token → route Claude Code through ChatGPT's backend.
 
 ## Install
 
+Not published to npm. Clone the repo and link it:
+
 ```bash
-npm install -g codex-for-claude-code
+git clone https://github.com/Yusang-park/codex-for-claude-code.git
+cd codex-for-claude-code
+npm link          # exposes `claude-codex` on PATH
 ```
 
-Or from source:
+To update later: `git pull` inside the same directory. The link keeps pointing at your working copy.
+
+Prefer not to `npm link`? Invoke directly:
 
 ```bash
-git clone https://github.com/yusang-park/codex-for-claude-code.git
-cd codex-for-claude-code
-npm link
+node /path/to/codex-for-claude-code/bin/claude-codex.mjs
 ```
 
 ---
@@ -137,7 +141,7 @@ Check proxy health: `curl http://127.0.0.1:3099/health`. If `version` mismatches
 ## Uninstall
 
 ```bash
-npm uninstall -g codex-for-claude-code
+cd /path/to/codex-for-claude-code && npm unlink
 pkill -f codex-proxy.mjs
 ```
 
@@ -148,7 +152,7 @@ Your `~/.claude/settings.json` is left intact (only `ANTHROPIC_*` env noise and 
 ## Development
 
 ```bash
-git clone https://github.com/yusang-park/codex-for-claude-code.git
+git clone https://github.com/Yusang-park/codex-for-claude-code.git
 cd codex-for-claude-code
 npm test            # smoke test: wrapper arg parsing + proxy module load
 node bin/claude-codex.mjs --version   # end-to-end sanity
