@@ -35,20 +35,15 @@ Use your Codex CLI OAuth token → route Claude Code through ChatGPT's backend.
 
 ## Install
 
-Not published to npm. Clone the repo and link it:
+```bash
+npm install -g codex-for-claude-code
+```
+
+Or from source:
 
 ```bash
 git clone https://github.com/Yusang-park/codex-for-claude-code.git
-cd codex-for-claude-code
-npm link          # exposes `claude-codex` on PATH
-```
-
-To update later: `git pull` inside the same directory. The link keeps pointing at your working copy.
-
-Prefer not to `npm link`? Invoke directly:
-
-```bash
-node /path/to/codex-for-claude-code/bin/claude-codex.mjs
+cd codex-for-claude-code && npm link
 ```
 
 ---
@@ -154,7 +149,7 @@ Use LiteLLM if you have API keys and need a routing layer. Use this if you alrea
 ## Uninstall
 
 ```bash
-cd /path/to/codex-for-claude-code && npm unlink
+npm uninstall -g codex-for-claude-code
 pkill -f codex-proxy.mjs
 ```
 
