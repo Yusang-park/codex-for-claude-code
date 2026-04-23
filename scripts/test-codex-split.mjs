@@ -3,8 +3,9 @@
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { chmodSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { CODEX_MODEL_OPTIONS } from './lib/codex-models.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const bin = join(here, '..', 'bin', 'claude-codex.mjs');
@@ -37,9 +38,33 @@ if (parsed.mode !== 'codex' || !parsed.passthrough.includes('--version') || !par
   process.exit(1);
 }
 
-if (parsed.childEnvPreview?.CLAUDE_CONFIG_DIR !== join(tempHome, '.claude')) {
-  process.stderr.write(`wrapper test: expected codex CLAUDE_CONFIG_DIR to share ~/.claude, got ${JSON.stringify(parsed.childEnvPreview)}\n`);
+const expectedCodexDir = join(tempHome, '.claude-codex');
+if (parsed.childEnvPreview?.CLAUDE_CONFIG_DIR !== expectedCodexDir) {
+  process.stderr.write(`wrapper test: expected codex CLAUDE_CONFIG_DIR=${expectedCodexDir}, got ${JSON.stringify(parsed.childEnvPreview)}\n`);
   process.exit(1);
+}
+
+// Picker visibility: Claude Code v2.1+ reads `${CLAUDE_CONFIG_DIR}/.claude.json`
+// (non-hashed). Codex options must land there, not in a hashed sidecar.
+const expectedCachePath = join(expectedCodexDir, '.claude.json');
+let cachedOptions;
+try {
+  const cached = JSON.parse(readFileSync(expectedCachePath, 'utf8'));
+  cachedOptions = cached.additionalModelOptionsCache;
+} catch (err) {
+  process.stderr.write(`wrapper test: cache file missing at ${expectedCachePath}: ${err?.message ?? err}\n`);
+  process.exit(1);
+}
+if (!Array.isArray(cachedOptions) || cachedOptions.length !== CODEX_MODEL_OPTIONS.length) {
+  process.stderr.write(`wrapper test: expected additionalModelOptionsCache to include ${CODEX_MODEL_OPTIONS.length} codex models, got ${JSON.stringify(cachedOptions)}\n`);
+  process.exit(1);
+}
+const cachedValues = new Set(cachedOptions.map((opt) => opt?.value));
+for (const opt of CODEX_MODEL_OPTIONS) {
+  if (!cachedValues.has(opt.value)) {
+    process.stderr.write(`wrapper test: cache missing codex model ${opt.value}; got ${JSON.stringify(cachedOptions)}\n`);
+    process.exit(1);
+  }
 }
 
 const inheritedCodexEnv = JSON.parse(

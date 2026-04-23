@@ -135,9 +135,11 @@ async function main() {
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${CODEX_PROXY_PORT}`,
     // Skip bootstrap so it doesn't overwrite our additionalModelOptionsCache injection
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-    // Share the regular Claude config dir so session history and `--resume`
-    // work across plain `claude` and `claude-codex`. Model cache isolation is
-    // handled by the scoped .claude-<hash>.json file written by set-model-mode.
+    // Point Claude Code at the isolated codex config dir (~/.claude-codex).
+    // Claude Code v2.1+ resolves its state file as `${CLAUDE_CONFIG_DIR}/.claude.json`
+    // (non-hashed); set-model-mode.mjs writes CODEX_MODEL_OPTIONS there so the
+    // model picker sees them. Plain `claude` keeps using the default ~/.claude
+    // dir, which this codex run never mutates → concurrent-window safe.
     CLAUDE_CONFIG_DIR: getCodexConfigDir(),
   } : {
     // Restore defaults — unset any codex overrides inherited from parent env

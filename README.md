@@ -38,9 +38,9 @@ On each launch `claude-codex`:
 
 1. Reads `~/.codex/auth.json` for your Codex OAuth token.
 2. Starts the local proxy on `127.0.0.1:3099` (if not already running).
-3. Uses the normal Claude config dir `~/.claude`, so session history and `--resume` are shared with plain `claude`.
-4. Injects Codex model options into a cwd-scoped file `~/.claude/.claude-<sha8(NFC(cwd))>.json`, keeping the model picker isolated without splitting session history.
-5. Spawns `claude` with `ANTHROPIC_BASE_URL=http://127.0.0.1:3099` and `CLAUDE_CONFIG_DIR=~/.claude`.
+3. Uses an isolated Claude config dir `~/.claude-codex` so Codex model-picker state cannot bleed into plain `claude` windows. Shared assets (`settings.json`, `agents`, `commands`, `hooks`, `plugins`) are symlinked from `~/.claude` so there is still one source of truth for configuration.
+4. Writes Codex model options to `~/.claude-codex/.claude.json` — Claude Code v2.1+ reads `${CLAUDE_CONFIG_DIR}/.claude.json` (non-hashed) to populate the model picker.
+5. Spawns `claude` with `ANTHROPIC_BASE_URL=http://127.0.0.1:3099` and `CLAUDE_CONFIG_DIR=~/.claude-codex`.
 
 Claude model IDs (`claude-*`, `opus`, `sonnet`, `haiku`) pass through unchanged to `api.anthropic.com`. Only Codex IDs hit ChatGPT.
 
@@ -61,7 +61,7 @@ Install Claude Code, or set `CLAUDE_CODEX_CLAUDE_BIN=/path/to/claude`.
 Quit the TUI and relaunch `claude-codex`.
 
 **`claude-codex --resume` cannot see my plain Claude sessions**
-Update to a build that uses the shared `~/.claude` config dir. Current releases share sessions and isolate only the model cache.
+Current builds keep session/history interoperability by symlinking shared Claude assets from `~/.claude` into `~/.claude-codex`. If plain `claude` sessions still do not appear, restart both TUIs so they reread the shared config tree.
 
 **Port 3099 in use**
 `pkill -f codex-proxy.mjs` or set `CODEX_PROXY_PORT=3199`.
