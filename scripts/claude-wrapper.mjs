@@ -4,7 +4,22 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
-import { setModelMode, clearModelCache, getCodexConfigDir, getCodexClaudeJsonPath, CODEX_PROXY_PORT } from './set-model-mode.mjs';
+import { randomUUID } from 'node:crypto';
+import {
+  setModelMode,
+  clearModelCache,
+  getCodexConfigDir,
+  getCodexClaudeJsonPath,
+  getModelModeStatePath,
+  getDefaultStateDir,
+  sanitizeSessionId,
+  sweepStaleModelModeStates,
+  unlinkLegacyModelModeState,
+  removeIfExists,
+  CODEX_PROXY_PORT,
+} from './set-model-mode.mjs';
+
+const MODEL_MODE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,7 +124,21 @@ async function ensureProxyRunning() {
 async function main() {
   const { mode, passthrough } = parseArgs(process.argv.slice(2));
   const binary = resolveClaudeBinary();
-  setModelMode(mode, process.cwd());
+  // Session-scoped model-mode state: reuse an inbound SMELTER_SESSION_ID when
+  // present (so `/resume` in the same shell keeps the same scoped file);
+  // otherwise coin a fresh UUID. `sanitizeSessionId` rejects anything that is
+  // not filename-safe so a hostile/misconfigured env cannot cause path
+  // traversal via the scoped filename.
+  const sid = sanitizeSessionId(process.env.SMELTER_SESSION_ID) || randomUUID();
+
+  // Pre-launch sweep: delete the legacy unscoped file (one-time migration) and
+  // prune stale scoped files older than the TTL. Runs BEFORE setModelMode so
+  // the sweep cannot delete the file we are about to write.
+  const stateDir = getDefaultStateDir(process.cwd());
+  unlinkLegacyModelModeState(stateDir);
+  sweepStaleModelModeStates(stateDir, sid, MODEL_MODE_TTL_MS);
+
+  setModelMode(mode, process.cwd(), sid);
 
   if (mode === 'codex' && process.env.SMELTER_WRAPPER_TEST !== '1') {
     if (!hasCodexAuth()) {
@@ -128,6 +157,7 @@ async function main() {
   const codexEnv = mode === 'codex' ? {
     CODEX_MODE: '1',
     SMELTER_MODEL_MODE: 'codex',
+    SMELTER_SESSION_ID: sid,
     SMELTER_ACTIVE_MODEL: codexStateModel ?? 'gpt-5.4',
     // Route all API calls through the local proxy.
     // Proxy passes claude-* model IDs through to Anthropic unchanged,
@@ -145,6 +175,7 @@ async function main() {
     // Restore defaults — unset any codex overrides inherited from parent env
     CODEX_MODE: '',
     SMELTER_MODEL_MODE: 'claude',
+    SMELTER_SESSION_ID: '',
     SMELTER_ACTIVE_MODEL: '',
     ANTHROPIC_BASE_URL: '',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '',
@@ -196,6 +227,10 @@ async function main() {
     if (cleaned || mode !== 'codex') return;
     cleaned = true;
     try { clearModelCache(); } catch { /* best effort */ }
+    // Unlink this session's scoped state file so readers in a concurrent
+    // session never pick up a dead sid on a fresh launch. SIGKILL leaks are
+    // reaped by the next wrapper's TTL sweep.
+    try { removeIfExists(getModelModeStatePath(process.cwd(), sid)); } catch { /* best effort */ }
   };
   process.on('exit', cleanup);
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
