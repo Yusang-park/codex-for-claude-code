@@ -14,9 +14,9 @@ const claudeJsonPath = join(homedir(), '.claude.json');
 // ~/.claude/.claude.json. Claude Code v2.1+ resolves its state file as
 // `${CLAUDE_CONFIG_DIR}/.claude.json` (non-hashed); writing to a hashed
 // sidecar leaves additionalModelOptionsCache invisible to the model picker.
-// Shared Claude assets (settings, agents, commands, hooks, plugins) are
-// symlinked into the codex dir so users keep a single source of truth.
-const SHARED_LINKS = ['settings.json', 'agents', 'commands', 'hooks', 'plugins'];
+// Shared Claude assets (settings, agents, commands, hooks, plugins, skills)
+// are symlinked into the codex dir so users keep a single source of truth.
+const SHARED_LINKS = ['settings.json', 'agents', 'commands', 'hooks', 'plugins', 'skills'];
 
 // Inlined from scripts/auto-confirm.mjs:65-67 to keep codex-for-claude-code
 // standalone (no cross-package import). Contract: matches regex there exactly
