@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { CODEX_MODEL_OPTIONS, DEFAULT_CODEX_MODEL, getCodexModelLabel } from './lib/codex-models.mjs';
 
@@ -16,7 +17,7 @@ const claudeJsonPath = join(homedir(), '.claude.json');
 // sidecar leaves additionalModelOptionsCache invisible to the model picker.
 // Shared Claude assets (settings, agents, commands, hooks, plugins, skills)
 // are symlinked into the codex dir so users keep a single source of truth.
-const SHARED_LINKS = ['settings.json', 'agents', 'commands', 'hooks', 'plugins', 'skills'];
+const SHARED_LINKS = ['settings.json', 'agents', 'commands', 'hooks', 'plugins', 'skills', 'CLAUDE.md', 'plugin.json'];
 
 // Inlined from scripts/auto-confirm.mjs:65-67 to keep codex-for-claude-code
 // standalone (no cross-package import). Contract: matches regex there exactly
@@ -34,16 +35,70 @@ export function getCodexClaudeJsonPath(home = homedir()) {
   return join(getCodexConfigDir(home), '.claude.json');
 }
 
-export function ensureCodexConfigDir(home = homedir()) {
+// Slots that fall back to the codex/Smelter repo when ~/.claude/<name> is
+// absent. Smelter's dev-install removes ~/.claude/skills + ~/.claude/agents
+// (replaced with symlinks), and a pure npm install of codex-for-claude-code
+// has no such dirs at all — without a repo fallback, codex windows would
+// have empty skills/agents pickers.
+const REPO_FALLBACK_WHITELIST = new Set(['skills', 'agents']);
+
+function deriveRepoRoot() {
+  if (process.env.SMELTER_REPO_ROOT) return process.env.SMELTER_REPO_ROOT;
+  // This file is at <repo>/codex-for-claude-code/scripts/. Walk up two
+  // levels to land at the parent repo (Smelter root in dev install, or the
+  // codex-for-claude-code package itself in npm install — neither has
+  // skills/agents in the latter case, so the fallback is a silent miss).
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+}
+
+export function ensureCodexConfigDir(home = homedir(), opts = {}) {
   const src = join(home, '.claude');
   const dst = getCodexConfigDir(home);
   mkdirSync(dst, { recursive: true });
+  // Only enable repo fallback when the caller (production wrapper or
+  // applyCodexMode) explicitly passes opts.repoRoot. Bare-call back-compat:
+  // ensureCodexConfigDir(home) keeps the original "skip if target missing"
+  // behavior — no auto-derived fallback that would surprise tests/callers.
+  const repoRoot = Object.prototype.hasOwnProperty.call(opts, 'repoRoot')
+    ? opts.repoRoot
+    : null;
+
   for (const name of SHARED_LINKS) {
     const link = join(dst, name);
     const target = join(src, name);
-    if (existsSync(link)) continue;
-    if (!existsSync(target)) continue;
-    try { symlinkSync(target, link); } catch { /* race / permission — skip */ }
+
+    // Self-heal: detect existing entry. If it's a dangling symlink (lstat
+    // sees it but existsSync resolves false), unlink so the slot can be
+    // replaced. Live symlinks and real dirs/files are preserved (user
+    // overrides + idempotency).
+    let existingLstat = null;
+    try { existingLstat = lstatSync(link); } catch { /* absent */ }
+    if (existingLstat) {
+      if (existingLstat.isSymbolicLink() && !existsSync(link)) {
+        try { unlinkSync(link); } catch { continue; }
+      } else {
+        continue;
+      }
+    }
+
+    let resolvedTarget = null;
+    if (existsSync(target)) {
+      resolvedTarget = target;
+    } else if (REPO_FALLBACK_WHITELIST.has(name)) {
+      const fallback = repoRoot ? join(repoRoot, name) : null;
+      if (fallback && existsSync(fallback)) {
+        resolvedTarget = fallback;
+      } else {
+        const reason = fallback
+          ? `target missing at ${target} and fallback missing at ${fallback}`
+          : `target missing at ${target} and no repoRoot fallback configured`;
+        process.stderr.write(`[set-model-mode] warning: ${name} ${reason}\n`);
+      }
+    }
+
+    if (resolvedTarget) {
+      try { symlinkSync(resolvedTarget, link); } catch { /* race / permission — skip */ }
+    }
   }
   return dst;
 }
@@ -127,6 +182,55 @@ export function clearModelCache(filePath = claudeJsonPath) {
   patchClaudeJson([], filePath);
 }
 
+const HASHED_SIDECAR_RE = /^\.claude-[0-9a-f]{8}\.json$/;
+
+// Strip codex-only entries from additionalModelOptionsCache in any
+// `${HOME}/.claude/.claude-<sha256(cwd)[0..8]>.json` per-cwd sidecar AND in
+// `${HOME}/.claude.json`. Claude Code v2.1+ persists the picker cache in
+// these locations independent of CLAUDE_CONFIG_DIR, so codex-mode entries
+// leak into plain `claude` runs unless we scrub explicitly. Files lacking
+// `additionalModelOptionsCache`, malformed JSON, or non-codex entries are
+// preserved.
+export function scrubGlobalCodexCaches(home = homedir()) {
+  const claudeDir = join(home, '.claude');
+  const claudeJsonTop = join(home, '.claude.json');
+
+  const filesToCheck = [];
+  if (existsSync(claudeDir)) {
+    let entries;
+    try { entries = readdirSync(claudeDir); } catch { entries = []; }
+    for (const name of entries) {
+      if (!HASHED_SIDECAR_RE.test(name)) continue;
+      filesToCheck.push(join(claudeDir, name));
+    }
+  }
+  if (existsSync(claudeJsonTop)) filesToCheck.push(claudeJsonTop);
+
+  for (const filePath of filesToCheck) {
+    let raw;
+    try { raw = readFileSync(filePath, 'utf8'); } catch { continue; }
+    let data;
+    try { data = JSON.parse(raw); } catch { continue; }
+    if (!data || typeof data !== 'object') continue;
+    const cache = data.additionalModelOptionsCache;
+    if (!Array.isArray(cache)) continue;
+
+    const filtered = cache.filter((entry) => {
+      const value = entry && typeof entry === 'object' ? String(entry.value ?? '') : '';
+      return !isCodexModel(value);
+    });
+    if (filtered.length === cache.length) continue;
+
+    data.additionalModelOptionsCache = filtered;
+    try {
+      writeFileSync(filePath, JSON.stringify(data) + '\n');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[set-model-mode] warning: could not scrub ${filePath}: ${message}\n`);
+    }
+  }
+}
+
 export function ensureStateDir(dirPath) {
   mkdirSync(dirPath, { recursive: true });
 }
@@ -182,7 +286,13 @@ export function applyCodexMode(settings, sessionId) {
   delete settings.availableModels;
   stripModelEnv(settings);
   delete settings.env.ANTHROPIC_BASE_URL;
-  ensureCodexConfigDir();
+  // Pass derived repoRoot so applyCodexMode resolves skills/agents fallback
+  // when ~/.claude/skills (etc.) is missing in the user's install.
+  ensureCodexConfigDir(homedir(), { repoRoot: deriveRepoRoot() });
+  // Strip codex entries from the per-cwd hashed sidecars in ~/.claude/.
+  // Claude Code writes those sidecars independently of CLAUDE_CONFIG_DIR,
+  // so without this scrub plain `claude` reads codex models as defaults.
+  scrubGlobalCodexCaches();
   setModelCache(CODEX_MODEL_OPTIONS, getCodexClaudeJsonPath());
   const stateDir = getDefaultStateDir();
   ensureStateDir(stateDir);
@@ -205,6 +315,7 @@ export function applyClaudeMode(settings, cwd = process.cwd(), sessionId) {
     removeIfExists(getModelModeStatePath(cwd, sid));
   }
   clearModelCache();
+  scrubGlobalCodexCaches();
   removeIfExists(join(cwd, '.smt', 'state', 'codex-state.json'));
 }
 

@@ -1,4 +1,5 @@
 export const CODEX_MODEL_OPTIONS = [
+  { value: 'gpt-5.5', label: 'Codex gpt-5.5', description: 'Codex flagship model' },
   { value: 'gpt-5.4', label: 'Codex gpt-5.4', description: 'Codex balanced model' },
   { value: 'gpt-5.3-codex-spark', label: 'Codex gpt-5.3-codex-spark', description: 'Codex spark model' },
   { value: 'gpt-5.4-mini', label: 'Codex gpt-5.4-mini', description: 'Codex fast model' },

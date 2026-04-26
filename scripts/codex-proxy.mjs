@@ -25,6 +25,7 @@ const CODEX_USAGE_PATH = join(STATE_DIR, 'codex-usage.json');
 const CODEX_RATELIMIT_PATH = join(STATE_DIR, 'codex-ratelimit.json');
 const CODEX_MODEL_CONTEXT_WINDOWS = {
   'gpt-5.4': 1_000_000,
+  'gpt-5.5': 1_000_000,
 };
 
 function getContextWindowForModel(model) {
