@@ -1,5 +1,10 @@
 # codex-for-claude-code
 
+[![npm version](https://img.shields.io/npm/v/codex-for-claude-code.svg)](https://www.npmjs.com/package/codex-for-claude-code)
+[![weekly downloads](https://img.shields.io/npm/dw/codex-for-claude-code.svg)](https://www.npmjs.com/package/codex-for-claude-code)
+[![total downloads](https://img.shields.io/npm/dt/codex-for-claude-code.svg)](https://www.npmjs.com/package/codex-for-claude-code)
+[![license](https://img.shields.io/npm/l/codex-for-claude-code.svg)](./LICENSE)
+
 <img width="903" height="724" alt="image" src="https://github.com/user-attachments/assets/4c873064-7f3d-4d55-9308-1a264c7aba75" />
 
 > Run **[Claude Code](https://claude.ai/code)** against **ChatGPT Codex** using your existing Codex CLI subscription.
