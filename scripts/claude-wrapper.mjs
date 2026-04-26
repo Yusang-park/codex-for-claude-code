@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { resolveAutoUpdate, AUTO_UPDATE_REENTRY_ENV } from './lib/auto-update.mjs';
 import {
   setModelMode,
   clearModelCache,
@@ -23,6 +24,8 @@ const MODEL_MODE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const PACKAGE_JSON_PATH = join(dirname(__dirname), 'package.json');
+const PACKAGE_VERSION = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf8')).version;
 const PROXY_SCRIPT = join(__dirname, 'codex-proxy.mjs');
 const EXPECTED_PROXY_VERSION = '6'; // must match PROXY_VERSION in codex-proxy.mjs
 const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
@@ -122,6 +125,27 @@ async function ensureProxyRunning() {
 }
 
 async function main() {
+  const autoUpdate = resolveAutoUpdate({ currentVersion: PACKAGE_VERSION, env: process.env });
+  if (autoUpdate.status === 'updated') {
+    process.stderr.write('[claude-wrapper] auto-update complete; restarting claude-codex\n');
+    const child = spawn(process.execPath, [process.argv[1], ...process.argv.slice(2)], {
+      stdio: 'inherit',
+      env: { ...process.env, [AUTO_UPDATE_REENTRY_ENV]: '1' },
+    });
+    child.on('exit', (code, signal) => {
+      if (signal) {
+        process.kill(process.pid, signal);
+        return;
+      }
+      process.exit(code ?? 0);
+    });
+    child.on('error', (error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    });
+    return;
+  }
+
   const { mode, passthrough } = parseArgs(process.argv.slice(2));
   const binary = resolveClaudeBinary();
   // Session-scoped model-mode state: reuse an inbound SMELTER_SESSION_ID when

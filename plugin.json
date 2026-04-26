@@ -1,6 +1,6 @@
 {
   "name": "codex-for-claude-code",
-  "version": "0.4.1",
+  "version": "0.2.6",
   "description": "Open-source Codex-style workflows for Claude Code",
   "hooks": "hooks/hooks.json",
   "author": "Yusang Park",
